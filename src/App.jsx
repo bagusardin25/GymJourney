@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import { authAPI, classesAPI, bookingsAPI, paymentsAPI, testimonialsAPI } from './services/api';
 
 // // --- MOCK DATA ---
 // // In a real application, this data would come from your backend API
@@ -1020,14 +1020,19 @@ const LoginPage = ({ onLogin }) => {
                             disabled={isLoading}
                         />
                     </div>
-                    <button 
-                        type="submit" 
+                    <button
+                        type="submit"
                         disabled={isLoading}
                         className="w-full bg-orange-500 text-white font-bold py-3 rounded-md hover:bg-orange-600 transition-colors disabled:bg-orange-400 disabled:cursor-not-allowed flex items-center justify-center"
                     >
                         {isLoading ? 'Signing in...' : 'Sign In'}
                     </button>
                 </form>
+                <div className="mt-6 text-center text-sm text-gray-400">
+                    <p>Demo credentials:</p>
+                    <p>Admin: admin@setiakawan.com / admin123</p>
+                    <p>Member: member@setiakawan.com / member123</p>
+                </div>
             </div>
         </div>
     );
@@ -1326,9 +1331,59 @@ const AIWorkoutPlanner = ({ showNotification }) => {
     );
 };
 
-const MemberDashboard = ({ user, showNotification }) => {
+const MemberDashboard = ({ user, showNotification, classes: allClasses }) => {
     const [activeTab, setActiveTab] = useState('status');
-    
+    const [bookedClasses, setBookedClasses] = useState([]);
+    const [paymentHistory, setPaymentHistory] = useState([]);
+    const [loading, setLoading] = useState(false);
+
+    // Fetch user's bookings and payments
+    useEffect(() => {
+        if (user) {
+            fetchUserData();
+        }
+    }, [user]);
+
+    const fetchUserData = async () => {
+        setLoading(true);
+        try {
+            const [bookingsRes, paymentsRes] = await Promise.all([
+                bookingsAPI.getMyBookings(),
+                paymentsAPI.getMyPayments()
+            ]);
+            setBookedClasses(bookingsRes.data.bookings || []);
+            setPaymentHistory(paymentsRes.data.payments || []);
+        } catch (error) {
+            console.error('Failed to fetch user data:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleBookClass = async (classId) => {
+        try {
+            const response = await bookingsAPI.bookClass(classId);
+            setBookedClasses(prev => [...prev, response.data.class]);
+            showNotification('Class booked successfully!', 'success');
+            fetchUserData();
+        } catch (error) {
+            const message = error.response?.data?.message || 'Failed to book class';
+            showNotification(message, 'error');
+        }
+    };
+
+    const handleCancelBooking = async (classId) => {
+        try {
+            await bookingsAPI.cancelBooking(classId);
+            setBookedClasses(prev => prev.filter(b => b.id !== classId));
+            showNotification('Booking cancelled successfully', 'info');
+            fetchUserData();
+        } catch (error) {
+            const message = error.response?.data?.message || 'Failed to cancel booking';
+            showNotification(message, 'error');
+        }
+    };
+
     const renderContent = () => {
         switch (activeTab) {
             case 'status':
@@ -1358,7 +1413,7 @@ const MemberDashboard = ({ user, showNotification }) => {
                         
                         <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div className="bg-gray-700 p-4 rounded-lg text-center">
-                                <div className="text-2xl font-bold text-orange-500">{mockData.bookedClasses.length}</div>
+                                <div className="text-2xl font-bold text-orange-500">{bookedClasses.length}</div>
                                 <div className="text-sm">Booked Classes</div>
                             </div>
                             <div className="bg-gray-700 p-4 rounded-lg text-center">
@@ -1376,13 +1431,18 @@ const MemberDashboard = ({ user, showNotification }) => {
                  return (
                     <div>
                         <h3 className="text-2xl font-bold mb-4">My Booked Classes</h3>
-                        {mockData.bookedClasses.length === 0 ? (
+                        {loading ? (
+                            <div className="text-center py-8">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto"></div>
+                                <p className="text-gray-400 mt-2">Loading your bookings...</p>
+                            </div>
+                        ) : bookedClasses.length === 0 ? (
                             <div className="bg-gray-700 p-8 rounded-lg text-center">
                                 <svg className="w-16 h-16 mx-auto text-gray-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                 </svg>
                                 <p className="text-gray-400">You haven't booked any classes yet.</p>
-                                <button 
+                                <button
                                     onClick={() => setActiveTab('book')}
                                     className="mt-4 bg-orange-500 text-white font-bold py-2 px-6 rounded-md hover:bg-orange-600 transition-colors"
                                 >
@@ -1391,15 +1451,15 @@ const MemberDashboard = ({ user, showNotification }) => {
                             </div>
                         ) : (
                             <div className="space-y-4">
-                                {mockData.bookedClasses.map(c => (
+                                {bookedClasses.map(c => (
                                     <div key={c.id} className="bg-gray-700 p-4 rounded-lg flex justify-between items-center">
                                         <div>
                                             <p className="font-bold text-orange-400">{c.name}</p>
                                             <p className="text-sm text-gray-300">{c.instructor} - {c.time}</p>
                                         </div>
-                                        <button 
+                                        <button
                                             className="bg-red-600 text-white px-3 py-1 text-sm rounded-md hover:bg-red-700 transition-colors"
-                                            onClick={() => showNotification('Class cancellation feature would be implemented here', 'info')}
+                                            onClick={() => handleCancelBooking(c.id)}
                                         >
                                             Cancel
                                         </button>
@@ -1414,10 +1474,15 @@ const MemberDashboard = ({ user, showNotification }) => {
                      <div>
                         <h3 className="text-2xl font-bold mb-4">Book a New Class</h3>
                         <div className="space-y-4">
-                            {mockData.classes.map(c => {
-                                const isBooked = mockData.bookedClasses.some(bc => bc.id === c.id);
+                            {loading ? (
+                                <div className="text-center py-8">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto"></div>
+                                    <p className="text-gray-400 mt-2">Loading classes...</p>
+                                </div>
+                            ) : (allClasses || []).map(c => {
+                                const isBooked = bookedClasses.some(bc => bc.id === c.id);
                                 const isFull = c.booked >= c.spots;
-                                
+
                                 return (
                                 <div key={c.id} className="bg-gray-700 p-4 rounded-lg flex justify-between items-center">
                                     <div>
@@ -1425,12 +1490,12 @@ const MemberDashboard = ({ user, showNotification }) => {
                                         <p className="text-sm text-gray-300">{c.instructor} - {c.time}</p>
                                         <p className="text-xs text-gray-400">{c.spots - c.booked} spots remaining</p>
                                     </div>
-                                    <button 
-                                        onClick={() => showNotification('Class booked successfully!', 'success')}
+                                    <button
+                                        onClick={() => handleBookClass(c.id)}
                                         disabled={isBooked || isFull}
                                         className={`px-4 py-2 text-sm rounded-md font-semibold transition-colors ${
-                                            isBooked ? 'bg-gray-500 cursor-not-allowed' : 
-                                            isFull ? 'bg-red-800 text-red-300 cursor-not-allowed' : 
+                                            isBooked ? 'bg-gray-500 cursor-not-allowed' :
+                                            isFull ? 'bg-red-800 text-red-300 cursor-not-allowed' :
                                             'bg-orange-500 hover:bg-orange-600'
                                         }`}
                                     >
@@ -1445,36 +1510,41 @@ const MemberDashboard = ({ user, showNotification }) => {
                  return (
                     <div>
                         <h3 className="text-2xl font-bold mb-4">Payment History</h3>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left">
-                               <thead className="bg-gray-700">
-                                   <tr>
-                                       <th className="p-3">Date</th>
-                                       <th className="p-3">Plan</th>
-                                       <th className="p-3">Amount</th>
-                                       <th className="p-3">Status</th>
-                                       <th className="p-3">Invoice</th>
-                                   </tr>
-                               </thead>
-                               <tbody>
-                                   {mockData.paymentHistory.map(p => (
-                                       <tr key={p.id} className="border-b border-gray-700 hover:bg-gray-700">
-                                           <td className="p-3">{p.date}</td>
-                                           <td className="p-3">{p.plan}</td>
-                                           <td className="p-3">${p.amount.toFixed(2)}</td>
-                                           <td className="p-3">
-                                               <span className="px-2 py-1 rounded-full text-xs bg-green-500/20 text-green-300">{p.status}</span>
-                                           </td>
-                                           <td className="p-3">
-                                               <button className="text-orange-400 hover:text-orange-300 text-sm">
-                                                   Download
-                                               </button>
-                                           </td>
+                        {loading ? (
+                            <div className="text-center py-8">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto"></div>
+                                <p className="text-gray-400 mt-2">Loading payments...</p>
+                            </div>
+                        ) : paymentHistory.length === 0 ? (
+                            <div className="bg-gray-700 p-8 rounded-lg text-center">
+                                <p className="text-gray-400">No payment history found.</p>
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left">
+                                   <thead className="bg-gray-700">
+                                       <tr>
+                                           <th className="p-3">Date</th>
+                                           <th className="p-3">Plan</th>
+                                           <th className="p-3">Amount</th>
+                                           <th className="p-3">Status</th>
                                        </tr>
-                                   ))}
-                               </tbody>
-                            </table>
-                        </div>
+                                   </thead>
+                                   <tbody>
+                                       {paymentHistory.map(p => (
+                                           <tr key={p.id} className="border-b border-gray-700 hover:bg-gray-700">
+                                               <td className="p-3">{p.payment_date || p.date}</td>
+                                               <td className="p-3">{p.plan}</td>
+                                               <td className="p-3">${parseFloat(p.amount || 0).toFixed(2)}</td>
+                                               <td className="p-3">
+                                                   <span className="px-2 py-1 rounded-full text-xs bg-green-500/20 text-green-300">{p.status}</span>
+                                               </td>
+                                           </tr>
+                                       ))}
+                                   </tbody>
+                                </table>
+                            </div>
+                        )}
                     </div>
                 );
             case 'profile':
@@ -1780,7 +1850,7 @@ const AdminDashboard = ({ showNotification }) => {
     );
 };
 
-const DashboardPage = ({ user, showNotification }) => {
+const DashboardPage = ({ user, showNotification, classes }) => {
     // Pastikan user ada sebelum render
     if (!user) {
         return (
@@ -1807,9 +1877,9 @@ const DashboardPage = ({ user, showNotification }) => {
                     </div>
                 </div>
                 <div className="bg-gray-800 rounded-lg shadow-xl overflow-hidden">
-                    {(user?.role === 'admin') ? 
-                        <AdminDashboard showNotification={showNotification} /> : 
-                        <MemberDashboard user={user} showNotification={showNotification} />}
+                    {(user?.role === 'admin') ?
+                        <AdminDashboard showNotification={showNotification} /> :
+                        <MemberDashboard user={user} showNotification={showNotification} classes={classes} />}
                 </div>
             </div>
         </div>
@@ -1824,156 +1894,126 @@ export default function App() {
     const [notification, setNotification] = useState({ message: '', type: '' });
     const topOfPageRef = useRef(null);
 
-    // State untuk menyimpan data dari API (Ini sudah benar)
+    // State untuk menyimpan data dari API
     const [classes, setClasses] = useState([]);
     const [trainers, setTrainers] = useState([]);
     const [testimonials, setTestimonials] = useState([]);
-    const [mockUsers, setMockUsers] = useState(() => {
-        const savedUsers = localStorage.getItem('SetiaKawan_mock_users');
-        if (savedUsers) {
-            try {
-                return JSON.parse(savedUsers);
-            } catch (error) {
-                console.warn('Failed to parse saved mock users:', error);
-            }
-        }
-        return DEFAULT_USERS;
-    });
+    const [bookedClasses, setBookedClasses] = useState([]);
+    const [paymentHistory, setPaymentHistory] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-    // useEffect untuk mengambil data dari API (Ini sudah benar)
+    // useEffect untuk mengambil data dari API
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [classesRes, trainersRes, testimonialsRes] = await Promise.all([
-                    axios.get('http://localhost:5000/api/classes'),
-                    axios.get('http://localhost:5000/api/trainers'),
-                    axios.get('http://localhost:5000/api/testimonials')
+                const [classesRes, testimonialsRes] = await Promise.all([
+                    classesAPI.getAll(),
+                    testimonialsAPI.getAll()
                 ]);
 
-                setClasses(classesRes.data);
-                setTrainers(trainersRes.data);
-                setTestimonials(testimonialsRes.data);
+                setClasses(classesRes.data.classes || []);
+                setTestimonials(testimonialsRes.data.testimonials || []);
+                
+                // Mock trainers data (can be added to backend later)
+                setTrainers([
+                    { id: 1, name: 'Sarah Lee', specialty: 'Yoga & Flexibility', bio: 'With over 10 years of experience in vinyasa and ashtanga yoga, Sarah helps members find balance and peace.', image: 'https://placehold.co/400x400/orange/white?text=SL' },
+                    { id: 2, name: 'John David', specialty: 'HIIT & Cardio', bio: 'John is a certified personal trainer known for his high-energy, motivational classes that push you to your limits.', image: 'https://placehold.co/400x400/orange/white?text=JD' },
+                    { id: 3, name: 'Mike Ross', specialty: 'Strength & Powerlifting', bio: 'A competitive powerlifter, Mike specializes in proper form and strength progression for all fitness levels.', image: 'https://placehold.co/400x400/orange/white?text=MR' },
+                    { id: 4, name: 'Maria Garcia', specialty: 'Dance & Zumba', bio: 'Maria brings the party to the gym with her infectious energy and fun-filled Zumba routines.', image: 'https://placehold.co/400x400/orange/white?text=MG' },
+                ]);
 
             } catch (error) {
                 console.error("Failed to fetch data:", error);
-                // Fungsi ini perlu diaktifkan untuk menampilkan pesan error
                 showNotification('Gagal memuat data dari server.', 'error');
+            } finally {
+                setLoading(false);
             }
         };
 
         fetchData();
     }, []);
 
+    // Check for saved user session
     useEffect(() => {
-        localStorage.setItem('SetiaKawan_mock_users', JSON.stringify(mockUsers));
-    }, [mockUsers]);
-
-    // AKTIFKAN KEMBALI: useEffect untuk memeriksa data user di localStorage
-    useEffect(() => {
-        const savedUser = localStorage.getItem('SetiaKawan_user');
-        if (savedUser) {
-            try {
-                setUser(JSON.parse(savedUser));  
-            } catch (err) {
-                console.error("Failed to parse saved user:", err);
-                setUser(null);
-                localStorage.removeItem('SetiaKawan_user');
+        const checkAuth = async () => {
+            const token = localStorage.getItem('token');
+            const savedUser = localStorage.getItem('user');
+            
+            if (token && savedUser) {
+                try {
+                    setUser(JSON.parse(savedUser));
+                } catch (err) {
+                    console.error("Failed to parse saved user:", err);
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('user');
+                }
             }
-        }
+        };
+        checkAuth();
     }, []);
 
-    // useEffect untuk handle redirect ke dashboard setelah user berhasil di-set
+    // Redirect to dashboard after login/register
     useEffect(() => {
         if (user && page === 'login') {
-            // Jika user sudah login tapi masih di halaman login, redirect ke dashboard
             setPage('dashboard');
         } else if (user && page === 'register') {
-            // Jika user sudah register tapi masih di halaman register, redirect ke dashboard
             setPage('dashboard');
         }
     }, [user, page]);
-    
-    // AKTIFKAN KEMBALI: useEffect untuk scroll ke atas halaman
+
+    // Scroll to top on page change
     useEffect(() => {
         topOfPageRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [page]);
-    
-    // AKTIFKAN KEMBALI: Fungsi untuk menampilkan notifikasi
+
     const showNotification = (message, type = 'info') => {
         setNotification({ message, type });
     };
 
-    // AKTIFKAN KEMBALI: Fungsi untuk handle login menggunakan data dummy
     const handleLogin = async ({ email, password }) => {
-        if (!email || !password) {
-            throw new Error('Email and password are required.');
+        try {
+            const response = await authAPI.login({ email, password });
+            const { token, user: userData } = response.data;
+            
+            localStorage.setItem('token', token);
+            localStorage.setItem('user', JSON.stringify(userData));
+            
+            setUser(userData);
+            setPage('dashboard');
+            showNotification(`Welcome back, ${userData.name || 'User'}!`, 'success');
+            
+            return userData;
+        } catch (error) {
+            const message = error.response?.data?.message || 'Login failed. Please check your credentials.';
+            throw new Error(message);
         }
-
-        const foundUser = mockUsers.find(
-            (mockUser) => mockUser.email.toLowerCase() === email.toLowerCase() && mockUser.password === password
-        );
-
-        if (!foundUser) {
-            throw new Error('Invalid email or password.');
-        }
-
-        const safeUser = sanitizeUser(foundUser);
-        const token = `dummy-token-${foundUser.id}`;
-
-        localStorage.setItem('SetiaKawan_token', token);
-        localStorage.setItem('SetiaKawan_user', JSON.stringify(safeUser));
-
-        setUser(safeUser);
-        setPage('dashboard');
-        showNotification(`Welcome back, ${safeUser.name || 'User'}!`, 'success');
-
-        return safeUser;
     };
-    
 
-    // AKTIFKAN KEMBALI: Fungsi untuk handle logout
     const handleLogout = () => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
         setUser(null);
-        localStorage.removeItem('SetiaKawan_token');
-        localStorage.removeItem('SetiaKawan_user');
         setPage('home');
         showNotification('You have been logged out.', 'info');
     };
-    
-    // AKTIFKAN KEMBALI: Fungsi untuk handle register menggunakan data dummy
+
     const handleRegister = async ({ name, email, password, membership }) => {
-        if (!name || !email || !password) {
-            throw new Error('Please fill in all required fields.');
+        try {
+            const response = await authAPI.register({ name, email, password, membership });
+            const { token, user: userData } = response.data;
+            
+            localStorage.setItem('token', token);
+            localStorage.setItem('user', JSON.stringify(userData));
+            
+            setUser(userData);
+            setPage('dashboard');
+            showNotification(`Registration successful! Welcome to SetiaKawan, ${userData.name || 'User'}.`, 'success');
+            
+            return userData;
+        } catch (error) {
+            const message = error.response?.data?.message || 'Registration failed. Please try again.';
+            throw new Error(message);
         }
-
-        const emailExists = mockUsers.some(
-            (mockUser) => mockUser.email.toLowerCase() === email.toLowerCase()
-        );
-
-        if (emailExists) {
-            throw new Error('Email has already been registered.');
-        }
-
-        const newUser = {
-            id: `user-${Date.now()}`,
-            name,
-            email,
-            password,
-            membership: membership || 'Gold',
-            role: 'member'
-        };
-
-        setMockUsers((prevUsers) => [...prevUsers, newUser]);
-
-        const safeUser = sanitizeUser(newUser);
-        localStorage.setItem('SetiaKawan_token', `dummy-token-${newUser.id}`);
-        localStorage.setItem('SetiaKawan_user', JSON.stringify(safeUser));
-
-        setUser(safeUser);
-        setPage('dashboard');
-        showNotification(`Registration successful! Welcome to SetiaKawan, ${safeUser.name || 'User'}.`, 'success');
-
-        return safeUser;
     };
 
     // Fungsi renderPage (Ini sudah benar)
@@ -2013,8 +2053,8 @@ export default function App() {
                     </div>;
                 }
                 // Butuh showNotification agar dashboard berfungsi
-                return <DashboardPage user={user} showNotification={showNotification} />; 
-            default: 
+                return <DashboardPage user={user} showNotification={showNotification} classes={classes} />;
+            default:
                 return <HomePage setPage={setPage} classes={classes} testimonials={testimonials} />;
         }
     };
